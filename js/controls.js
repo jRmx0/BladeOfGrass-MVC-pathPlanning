@@ -11,31 +11,66 @@ class ControlsManager {
         this.currentSpeed = 5;
         this.obstacleCounter = 1;
         
+        // Simulation state tracking for pause/resume
+        this.currentIndex = 0;
+        this.progress = 0;
+        
         this.setupEventListeners();
         this.updateButtonStates();
     }
     
     setupEventListeners() {
+        console.log('🔧 Setting up event listeners...');
+        
         // Main control buttons
-        document.getElementById('resetBtn').addEventListener('click', () => this.reset());
-        document.getElementById('boundaryBtn').addEventListener('click', () => this.startBoundary());
-        document.getElementById('planBtn').addEventListener('click', () => this.generatePlan());
+        const resetBtn = document.getElementById('resetBtn');
+        const boundaryBtn = document.getElementById('boundaryBtn');
+        const planBtn = document.getElementById('planBtn');
+        
+        console.log('Button elements:', {
+            resetBtn: !!resetBtn,
+            boundaryBtn: !!boundaryBtn,
+            planBtn: !!planBtn
+        });
+        
+        if (!boundaryBtn) {
+            console.error('❌ Boundary button not found!');
+            return;
+        }
+        
+        resetBtn?.addEventListener('click', () => {
+            console.log('🔄 Reset clicked');
+            this.reset();
+        });
+        
+        boundaryBtn.addEventListener('click', () => {
+            console.log('📐 Boundary clicked');
+            this.startBoundary();
+        });
+        
+        planBtn?.addEventListener('click', () => {
+            console.log('🧮 Plan clicked');
+            this.generatePlan();
+        });
         
         // Obstacle buttons
-        document.getElementById('addObstacleBtn').addEventListener('click', () => this.addObstacle());
-        document.getElementById('addDynamicObstacleBtn').addEventListener('click', () => this.addDynamicObstacle());
+        document.getElementById('addObstacleBtn')?.addEventListener('click', () => this.addObstacle());
+        document.getElementById('addDynamicObstacleBtn')?.addEventListener('click', () => this.addDynamicObstacle());
         
         // Simulation buttons
-        document.getElementById('runBtn').addEventListener('click', () => this.run());
-        document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
-        document.getElementById('stopBtn').addEventListener('click', () => this.stop());
+        document.getElementById('runBtn')?.addEventListener('click', () => this.run());
+        document.getElementById('pauseBtn')?.addEventListener('click', () => this.pause());
+        document.getElementById('resumeBtn')?.addEventListener('click', () => this.resume());
+        document.getElementById('stopBtn')?.addEventListener('click', () => this.stop());
         
         // Speed control
         const speedSlider = document.getElementById('speedSlider');
-        speedSlider.addEventListener('input', (e) => this.updateSpeed(e.target.value));
+        speedSlider?.addEventListener('input', (e) => this.updateSpeed(e.target.value));
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+        
+        console.log('✅ Event listeners set up successfully');
     }
     
     handleKeyboard(e) {
@@ -72,8 +107,60 @@ class ControlsManager {
                 }
                 break;
             case 'escape':
-                this.canvas.setMode('ready');
+                // Smart ESC handling: finish valid drawings, cancel invalid ones
+                if (this.canvas.mode === 'boundary') {
+                    if (this.canvas.boundary.length >= 3) {
+                        // Valid boundary - finish it
+                        this.canvas.finishBoundary();
+                    } else {
+                        // Invalid boundary - cancel it
+                        this.canvas.setMode('ready');
+                        this.canvas.render();
+                        this.canvas.updateCanvasOverlay('Incomplete boundary cancelled. Ready for next action.');
+                    }
+                } else if (this.canvas.mode === 'obstacle') {
+                    if (this.canvas.currentObstacle.length >= 3) {
+                        // Valid obstacle - finish it
+                        this.canvas.finishObstacle();
+                    } else {
+                        // Invalid obstacle - cancel it
+                        this.canvas.setMode('ready');
+                        this.canvas.render();
+                        this.canvas.updateCanvasOverlay('Incomplete obstacle cancelled. Ready for next action.');
+                    }
+                } else if (this.canvas.mode === 'obstacle-dynamic') {
+                    if (this.canvas.currentObstacle.length >= 3) {
+                        // Valid dynamic obstacle - finish it
+                        this.canvas.finishDynamicObstacle();
+                    } else {
+                        // Invalid dynamic obstacle - cancel it
+                        this.canvas.setMode('ready');
+                        this.canvas.render();
+                        this.canvas.updateCanvasOverlay('Incomplete dynamic obstacle cancelled. Ready for next action.');
+                    }
+                } else {
+                    // Not in drawing mode - just clear any state
+                    this.canvas.setMode('ready');
+                    this.canvas.render();
+                    this.canvas.updateCanvasOverlay('Ready for next action.');
+                }
                 this.updateButtonStates();
+                break;
+            case '=':
+            case '+':
+                e.preventDefault();
+                this.canvas.zoomIn();
+                break;
+            case '-':
+            case '_':
+                e.preventDefault();
+                this.canvas.zoomOut();
+                break;
+            case '0':
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                    this.canvas.resetZoom();
+                }
                 break;
         }
     }
@@ -89,9 +176,13 @@ class ControlsManager {
     }
     
     startBoundary() {
+        console.log('🎯 startBoundary called, current mode:', this.canvas.mode);
+        
         if (this.canvas.mode === 'boundary') {
-            this.canvas.setMode('ready');
+            console.log('📐 Finishing boundary');
+            this.canvas.finishBoundary();
         } else {
+            console.log('📐 Entering boundary mode');
             this.canvas.setMode('boundary');
             this.canvas.updateCanvasOverlay('Click to add boundary points, right-click to finish');
         }
@@ -100,7 +191,7 @@ class ControlsManager {
     
     addObstacle() {
         if (this.canvas.mode === 'obstacle') {
-            this.canvas.setMode('ready');
+            this.canvas.finishObstacle();
         } else {
             this.canvas.setMode('obstacle');
             this.canvas.updateCanvasOverlay('Click to add obstacle points, right-click to finish');
@@ -110,7 +201,7 @@ class ControlsManager {
     
     addDynamicObstacle() {
         if (this.canvas.mode === 'obstacle-dynamic') {
-            this.canvas.setMode('ready');
+            this.canvas.finishDynamicObstacle();
         } else {
             this.canvas.setMode('obstacle-dynamic');
             this.canvas.updateCanvasOverlay('Click to add dynamic obstacle points, right-click to finish');
@@ -206,6 +297,8 @@ class ControlsManager {
         
         this.isRunning = true;
         this.isPaused = false;
+        this.currentIndex = 0;  // Reset position for fresh start
+        this.progress = 0;      // Reset progress for fresh start
         this.startSimulation();
         this.updateButtonStates();
         this.updateRobotStatus('Running', null, 0, this.currentSpeed);
@@ -217,9 +310,21 @@ class ControlsManager {
         this.updateRobotStatus('Paused', null, null, 0);
     }
     
+    resume() {
+        if (this.isRunning && this.isPaused) {
+            this.isPaused = false;
+            this.updateButtonStates();
+            this.updateRobotStatus('Running', null, null, this.currentSpeed);
+            // Restart the animation loop
+            this.startSimulation();
+        }
+    }
+    
     stop() {
         this.isRunning = false;
         this.isPaused = false;
+        this.currentIndex = 0;  // Reset position
+        this.progress = 0;      // Reset progress
         this.canvas.robotPosition = null;
         this.canvas.render();
         this.updateButtonStates();
@@ -241,13 +346,17 @@ class ControlsManager {
         const path = this.canvas.plannedPath;
         if (path.length === 0) return;
         
-        let currentIndex = 0;
-        let progress = 0;
+        // Use instance variables to preserve state across pause/resume
+        // Only reset if starting fresh (not resuming)
+        if (!this.isPaused && this.currentIndex === 0) {
+            this.currentIndex = 0;
+            this.progress = 0;
+        }
         
         const animate = () => {
             if (!this.isRunning || this.isPaused) return;
             
-            if (currentIndex >= path.length - 1) {
+            if (this.currentIndex >= path.length - 1) {
                 // Simulation complete
                 this.stop();
                 this.updateRobotStatus('Complete', path[path.length - 1], 100, 0);
@@ -256,8 +365,8 @@ class ControlsManager {
             }
             
             // Update robot position
-            const current = path[currentIndex];
-            const next = path[currentIndex + 1];
+            const current = path[this.currentIndex];
+            const next = path[this.currentIndex + 1];
             
             if (next) {
                 // Calculate heading
@@ -270,11 +379,11 @@ class ControlsManager {
                 });
                 
                 // Update progress
-                progress = ((currentIndex + 1) / path.length) * 100;
-                this.updateRobotStatus('Running', current, progress, this.currentSpeed);
+                this.progress = ((this.currentIndex + 1) / path.length) * 100;
+                this.updateRobotStatus('Running', current, this.progress, this.currentSpeed);
             }
             
-            currentIndex++;
+            this.currentIndex++;
             
             // Animation speed based on slider
             const delay = Math.max(50, 500 - (this.currentSpeed * 45));
@@ -288,21 +397,26 @@ class ControlsManager {
         const hasBoundary = this.canvas.boundary.length >= 3;
         const hasPath = this.canvas.plannedPath.length > 0;
         const isDrawing = this.canvas.mode !== 'ready';
+        const isSimulationActive = this.isRunning; // Robot running or paused
         
-        // Setup buttons
+        // Setup buttons - disabled during simulation or when drawing in different mode
         document.getElementById('boundaryBtn').textContent = 
             this.canvas.mode === 'boundary' ? '⏹️ FINISH BOUNDARY' : '📐 BOUNDARY';
-        document.getElementById('planBtn').disabled = !hasBoundary || isDrawing;
+        document.getElementById('boundaryBtn').disabled = isSimulationActive || (isDrawing && this.canvas.mode !== 'boundary');
+        document.getElementById('planBtn').disabled = !hasBoundary || isDrawing || isSimulationActive;
         
-        // Obstacle buttons
+        // Obstacle buttons - disabled during simulation or when drawing in different mode
         document.getElementById('addObstacleBtn').textContent = 
             this.canvas.mode === 'obstacle' ? '⏹️ FINISH OBSTACLE' : '🌳 ADD OBSTACLE';
+        document.getElementById('addObstacleBtn').disabled = isSimulationActive || (isDrawing && this.canvas.mode !== 'obstacle');
         document.getElementById('addDynamicObstacleBtn').textContent = 
             this.canvas.mode === 'obstacle-dynamic' ? '⏹️ FINISH DYNAMIC' : '⚡ ADD DYNAMIC';
+        document.getElementById('addDynamicObstacleBtn').disabled = isSimulationActive || (isDrawing && this.canvas.mode !== 'obstacle-dynamic');
         
         // Simulation buttons
         document.getElementById('runBtn').disabled = !hasPath || this.isRunning || isDrawing;
         document.getElementById('pauseBtn').disabled = !this.isRunning || this.isPaused || isDrawing;
+        document.getElementById('resumeBtn').disabled = !this.isRunning || !this.isPaused || isDrawing;
         document.getElementById('stopBtn').disabled = !this.isRunning || isDrawing;
         
         // Update button styles based on mode
@@ -315,7 +429,8 @@ class ControlsManager {
                 (btnId === 'addDynamicObstacleBtn' && this.canvas.mode === 'obstacle-dynamic')
             );
             
-            if (isActive) {
+            // Only apply active styling if button is not disabled
+            if (isActive && !btn.disabled) {
                 btn.style.backgroundColor = '#e67e22';
             } else {
                 btn.style.backgroundColor = '';
@@ -340,7 +455,10 @@ class ControlsManager {
         }
         
         listContainer.innerHTML = allObstacles.map(obstacle => `
-            <div class="obstacle-item ${obstacle.type}">
+            <div class="obstacle-item ${obstacle.type}" 
+                 data-obstacle-id="${obstacle.id}"
+                 onmouseenter="app.highlightObstacle('${obstacle.id}')"
+                 onmouseleave="app.unhighlightObstacle('${obstacle.id}')">
                 <span class="obstacle-name">
                     ${obstacle.type === 'dynamic' ? '⚡' : '🌳'} 
                     ${obstacle.type === 'dynamic' ? 'Dynamic' : 'Obstacle'} ${obstacle.id.split('_')[1].slice(-3)}
@@ -358,16 +476,135 @@ class ControlsManager {
         this.updateStats();
     }
     
+    highlightObstacle(obstacleId) {
+        this.canvas.setHighlightedObstacle(obstacleId);
+    }
+    
+    unhighlightObstacle(obstacleId) {
+        this.canvas.clearHighlightedObstacle();
+    }
+    
     updateStats() {
+        // Calculate boundary area with 1 decimal place
         const boundaryArea = this.canvas.calculatePolygonArea(this.canvas.boundary);
+        
+        // Calculate total obstacles area
+        const obstaclesArea = this.calculateObstaclesArea();
+        
+        // Calculate useful area (boundary - obstacles)
+        const usefulArea = Math.max(0, parseFloat(boundaryArea) - parseFloat(obstaclesArea)).toFixed(1);
+        
+        // Calculate other stats
         const pathLength = this.calculatePathLength();
-        const efficiency = pathLength > 0 ? ((parseFloat(boundaryArea) / (pathLength / 50)) * 100).toFixed(1) : 0;
         const estimatedTime = this.calculateEstimatedTime(pathLength);
         
+        // Update UI
         document.getElementById('pathLength').textContent = `${pathLength} m`;
-        document.getElementById('coverageArea').textContent = `${boundaryArea} m²`;
-        document.getElementById('efficiency').textContent = `${efficiency}%`;
-        document.getElementById('estimatedTime').textContent = estimatedTime;
+        document.getElementById('coverageArea').textContent = `${parseFloat(boundaryArea).toFixed(1)} m²`;
+        
+        // Update estimated time in robot status section
+        const estimatedTimeElement = document.getElementById('estimatedTime');
+        if (estimatedTimeElement) {
+            estimatedTimeElement.textContent = estimatedTime;
+        }
+        
+        // Update useful area
+        const usefulAreaElement = document.getElementById('usefulArea');
+        if (usefulAreaElement) {
+            usefulAreaElement.textContent = `${usefulArea} m²`;
+        }
+    }
+    
+    calculateObstaclesArea() {
+        const allObstacles = [
+            ...this.canvas.obstacles.map(obs => obs.points),
+            ...this.canvas.dynamicObstacles.map(obs => obs.points)
+        ];
+        
+        if (allObstacles.length === 0) return '0.0';
+        if (allObstacles.length === 1) {
+            return this.canvas.calculatePolygonArea(allObstacles[0]);
+        }
+        
+        // For overlapping obstacles, we need to calculate the union of all obstacle polygons
+        // This is computationally complex, so we'll use an approximation method
+        const totalObstacleArea = this.calculateUnionArea(allObstacles);
+        
+        return totalObstacleArea.toFixed(1);
+    }
+    
+    calculateUnionArea(polygons) {
+        if (polygons.length === 0) return 0;
+        if (polygons.length === 1) {
+            return parseFloat(this.canvas.calculatePolygonArea(polygons[0]));
+        }
+        
+        // Use a grid-based approximation for union area calculation
+        // This is more accurate than simple addition and handles overlaps
+        
+        // Find bounding box of all polygons
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        
+        polygons.forEach(polygon => {
+            polygon.forEach(point => {
+                minX = Math.min(minX, point.x);
+                maxX = Math.max(maxX, point.x);
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
+            });
+        });
+        
+        // Create a grid with reasonable resolution (2x2 pixel cells)
+        const cellSize = 2;
+        const gridWidth = Math.ceil((maxX - minX) / cellSize);
+        const gridHeight = Math.ceil((maxY - minY) / cellSize);
+        
+        let coveredCells = 0;
+        
+        // Check each grid cell
+        for (let i = 0; i < gridWidth; i++) {
+            for (let j = 0; j < gridHeight; j++) {
+                const x = minX + (i + 0.5) * cellSize;
+                const y = minY + (j + 0.5) * cellSize;
+                
+                // Check if this point is inside any obstacle
+                const isInsideAnyObstacle = polygons.some(polygon => 
+                    this.isPointInPolygon({ x, y }, polygon)
+                );
+                
+                if (isInsideAnyObstacle) {
+                    coveredCells++;
+                }
+            }
+        }
+        
+        // Convert grid cells back to area (pixels squared, then to meters squared)
+        const pixelArea = coveredCells * cellSize * cellSize;
+        const meterArea = pixelArea / (50 * 50); // 50 pixels = 1 meter
+        
+        return meterArea;
+    }
+    
+    isPointInPolygon(point, polygon) {
+        if (polygon.length < 3) return false;
+        
+        let inside = false;
+        let j = polygon.length - 1;
+        
+        for (let i = 0; i < polygon.length; i++) {
+            const xi = polygon[i].x;
+            const yi = polygon[i].y;
+            const xj = polygon[j].x;
+            const yj = polygon[j].y;
+            
+            if (((yi > point.y) !== (yj > point.y)) &&
+                (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+                inside = !inside;
+            }
+            j = i;
+        }
+        
+        return inside;
     }
     
     calculatePathLength() {

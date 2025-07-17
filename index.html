@@ -116,6 +116,11 @@
             transform: none;
         }
 
+        .btn:disabled:hover {
+            background-color: #7f8c8d !important;
+            transform: none !important;
+        }
+
         .speed-control {
             margin-top: 15px;
         }
@@ -309,7 +314,8 @@
             <div class="control-group">
                 <h3>Simulation</h3>
                 <button class="btn success" id="runBtn" disabled>▶️ RUN</button>
-                <button class="btn" id="pauseBtn" disabled>⏸️ PAUSE</button>
+                <button class="btn warning" id="pauseBtn" disabled>⏸️ PAUSE</button>
+                <button class="btn success" id="resumeBtn" disabled>▶️ RESUME</button>
                 <button class="btn danger" id="stopBtn" disabled>⏹️ STOP</button>
                 
                 <div class="speed-control">
@@ -353,6 +359,10 @@
                     <span class="status-label">State:</span>
                     <span class="status-value" id="robotState">Idle</span>
                 </div>
+                <div class="status-item">
+                    <span class="status-label">Est. Time:</span>
+                    <span class="status-value" id="estimatedTime">0:00</span>
+                </div>
             </div>
 
             <div class="status-section">
@@ -366,12 +376,20 @@
                     <span class="status-value" id="coverageArea">0.0 m²</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Efficiency:</span>
-                    <span class="status-value" id="efficiency">0%</span>
+                    <span class="status-label">Useful Area:</span>
+                    <span class="status-value" id="usefulArea">0.0 m²</span>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <h3>🔍 View Controls</h3>
+                <div class="status-item">
+                    <span class="status-label">Zoom:</span>
+                    <span class="status-value" id="zoomInfo">100%</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">Est. Time:</span>
-                    <span class="status-value" id="estimatedTime">0:00</span>
+                    <span class="status-label">Cursor:</span>
+                    <span class="status-value" id="cursorPosition">(0.0, 0.0) m</span>
                 </div>
             </div>
 

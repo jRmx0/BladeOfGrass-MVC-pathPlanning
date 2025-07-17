@@ -29,31 +29,57 @@ class App {
         console.log('  ✅ Mock path planning');
         console.log('  ✅ Robot simulation');
         
-        // Initialize components
-        this.canvas = new CanvasManager('mainCanvas');
-        this.controls = new ControlsManager(this.canvas);
-        
-        // Setup error handling
-        this.setupErrorHandling();
-        
-        // Initialize UI
-        this.updateButtonStates();
-        this.updateStats();
-        this.updateObstacleList();
-        
-        // Show welcome message
-        this.showWelcomeMessage();
-        
-        console.log('🚀 Application ready! Use controls or keyboard shortcuts:');
-        console.log('  B - Start boundary drawing');
-        console.log('  O - Add obstacle');
-        console.log('  D - Add dynamic obstacle');
-        console.log('  P - Generate plan');
-        console.log('  Space - Play/Pause simulation');
-        console.log('  Ctrl+R - Reset everything');
-        console.log('  Esc - Cancel current drawing mode');
+        try {
+            // Test if DOM elements exist
+            const canvas = document.getElementById('mainCanvas');
+            const boundaryBtn = document.getElementById('boundaryBtn');
+            
+            if (!canvas) {
+                throw new Error('Canvas element not found');
+            }
+            if (!boundaryBtn) {
+                throw new Error('Boundary button not found');
+            }
+            
+            console.log('✅ DOM elements found');
+            
+            // Initialize components
+            this.canvas = new CanvasManager('mainCanvas');
+            console.log('✅ Canvas manager initialized');
+            
+            this.controls = new ControlsManager(this.canvas);
+            console.log('✅ Controls manager initialized');
+            
+            // Setup error handling
+            this.setupErrorHandling();
+            
+            // Initialize UI
+            this.updateButtonStates();
+            this.updateStats();
+            this.updateObstacleList();
+            
+            // Show welcome message
+            this.showWelcomeMessage();
+            
+            console.log('🚀 Application ready! Use controls or keyboard shortcuts:');
+            console.log('  B - Start boundary drawing');
+            console.log('  O - Add obstacle');
+            console.log('  D - Add dynamic obstacle');
+            console.log('  P - Generate plan');
+            console.log('  Space - Play/Pause simulation');
+            console.log('  Ctrl+R - Reset everything');
+            console.log('  Esc - Cancel current drawing mode');
+            console.log('  + / - - Zoom in/out');
+            console.log('  Ctrl+0 - Reset zoom');
+            console.log('  Mouse wheel - Zoom at cursor');
+            console.log('  Ctrl+Click - Pan canvas');
+            
+        } catch (error) {
+            console.error('❌ Setup failed:', error);
+            alert('Setup failed: ' + error.message + '. Check browser console for details.');
+        }
     }
-    
+
     setupErrorHandling() {
         window.addEventListener('error', (e) => {
             console.error('Application error:', e.error);
@@ -104,6 +130,18 @@ class App {
     removeObstacle(obstacleId) {
         if (this.controls) {
             this.controls.removeObstacle(obstacleId);
+        }
+    }
+    
+    highlightObstacle(obstacleId) {
+        if (this.controls) {
+            this.controls.highlightObstacle(obstacleId);
+        }
+    }
+    
+    unhighlightObstacle(obstacleId) {
+        if (this.controls) {
+            this.controls.unhighlightObstacle(obstacleId);
         }
     }
     

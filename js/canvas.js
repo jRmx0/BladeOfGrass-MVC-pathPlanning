@@ -15,11 +15,18 @@ class CanvasManager {
         this.robotPosition = null;
         this.mode = 'ready'; // ready, boundary, obstacle, obstacle-dynamic
         this.currentObstacle = [];
+        this.highlightedObstacle = null; // For hover highlighting
         
-        this.setupCanvas();
-        this.setupEventListeners();
+        // Zoom and pan properties
+        this.scale = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.minScale = 0.2;
+        this.maxScale = 5.0;
+        this.isPanning = false;
+        this.lastPanPoint = { x: 0, y: 0 };
         
-        // Colors
+        // Colors - Initialize BEFORE setup to avoid render errors
         this.colors = {
             boundary: '#27ae60',      // Green
             obstacle: '#e74c3c',      // Red
@@ -31,6 +38,8 @@ class CanvasManager {
             grid: '#ecf0f1'           // Very light gray
         };
         
+        this.setupCanvas();
+        this.setupEventListeners();
         this.render();
     }
     
@@ -54,13 +63,29 @@ class CanvasManager {
             e.preventDefault();
             this.handleRightClick(e);
         });
+        
+        // Zoom functionality
+        this.canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            this.handleWheel(e);
+        });
+        
+        // Pan functionality
+        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('mouseleave', (e) => this.handleMouseLeave(e));
     }
     
     getMousePosition(e) {
         const rect = this.canvas.getBoundingClientRect();
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
+        
+        // Transform canvas coordinates to world coordinates (accounting for zoom and pan)
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: (canvasX - this.panX) / this.scale,
+            y: (canvasY - this.panY) / this.scale
         };
     }
     
@@ -92,11 +117,88 @@ class CanvasManager {
     }
     
     handleMouseMove(e) {
+        // Always update cursor position for display
+        const currentMousePos = this.getMousePosition(e);
+        this.updateCursorPosition(currentMousePos);
+        
+        // Handle panning
+        if (this.isPanning) {
+            const rect = this.canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            this.panX += currentX - this.lastPanPoint.x;
+            this.panY += currentY - this.lastPanPoint.y;
+            
+            this.lastPanPoint.x = currentX;
+            this.lastPanPoint.y = currentY;
+            
+            this.render();
+            return;
+        }
+        
         // Show preview line when drawing polygons
         if ((this.mode === 'boundary' && this.boundary.length > 0) ||
             ((this.mode === 'obstacle' || this.mode === 'obstacle-dynamic') && this.currentObstacle.length > 0)) {
-            this.mousePosition = this.getMousePosition(e);
+            this.mousePosition = currentMousePos;
             this.render();
+        }
+    }
+    
+    handleMouseDown(e) {
+        // Only start panning with middle mouse button or Ctrl+left click
+        if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
+            e.preventDefault();
+            this.isPanning = true;
+            const rect = this.canvas.getBoundingClientRect();
+            this.lastPanPoint.x = e.clientX - rect.left;
+            this.lastPanPoint.y = e.clientY - rect.top;
+            this.canvas.style.cursor = 'grabbing';
+        }
+    }
+    
+    handleMouseUp(e) {
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.canvas.style.cursor = this.mode === 'ready' ? 'default' : 'crosshair';
+        }
+    }
+    
+    handleMouseLeave(e) {
+        // Clear cursor position when mouse leaves canvas
+        const cursorInfo = document.getElementById('cursorPosition');
+        if (cursorInfo) {
+            cursorInfo.textContent = '(-, -) m';
+        }
+        
+        // Stop panning if active
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.canvas.style.cursor = this.mode === 'ready' ? 'default' : 'crosshair';
+        }
+    }
+    
+    handleWheel(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Calculate zoom
+        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+        const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * zoomFactor));
+        
+        if (newScale !== this.scale) {
+            // Zoom towards mouse position
+            const worldX = (mouseX - this.panX) / this.scale;
+            const worldY = (mouseY - this.panY) / this.scale;
+            
+            this.scale = newScale;
+            
+            this.panX = mouseX - worldX * this.scale;
+            this.panY = mouseY - worldY * this.scale;
+            
+            this.render();
+            this.updateZoomInfo();
         }
     }
     
@@ -104,6 +206,9 @@ class CanvasManager {
         this.boundary.push(pos);
         this.updateCanvasOverlay(`Boundary: ${this.boundary.length} points (right-click to finish)`);
         this.render();
+        
+        // Update stats instantly as boundary changes
+        app.updateStats();
         
         // Enable plan button once boundary is complete
         if (this.boundary.length >= 3) {
@@ -114,8 +219,20 @@ class CanvasManager {
     finishBoundary() {
         if (this.boundary.length >= 3) {
             this.setMode('ready');
+            this.render();  // Force re-render to clear helper lines
             this.updateCanvasOverlay('Boundary complete! Click PLAN to generate path.');
             app.updateButtonStates();
+            app.updateStats();  // Update stats when boundary is complete
+        } else {
+            // Clean up incomplete boundary (1-2 points)
+            if (this.boundary.length > 0) {
+                this.boundary = [];
+                this.setMode('ready');
+                this.render();
+                this.updateCanvasOverlay('Incomplete boundary removed. Click BOUNDARY to start again.');
+                app.updateButtonStates();
+                app.updateStats();  // Update stats when boundary is removed
+            }
         }
     }
     
@@ -135,9 +252,20 @@ class CanvasManager {
             });
             this.currentObstacle = [];
             this.setMode('ready');
+            this.render();  // Force re-render to clear helper lines
             this.updateCanvasOverlay('Obstacle added! Add more or click PLAN.');
             app.updateObstacleList();
             app.updateButtonStates();
+            app.updateStats();  // Update stats when obstacle is added
+        } else {
+            // Clean up incomplete obstacle (1-2 points)
+            if (this.currentObstacle.length > 0) {
+                this.currentObstacle = [];
+                this.setMode('ready');
+                this.render();
+                this.updateCanvasOverlay('Incomplete obstacle removed. Add obstacles or click PLAN.');
+                app.updateButtonStates();
+            }
         }
     }
     
@@ -157,38 +285,71 @@ class CanvasManager {
             });
             this.currentObstacle = [];
             this.setMode('ready');
+            this.render();  // Force re-render to clear helper lines
             this.updateCanvasOverlay('Dynamic obstacle added! Add more or click PLAN.');
             app.updateObstacleList();
+            app.updateButtonStates();
+            app.updateStats();  // Update stats when dynamic obstacle is added
+        } else {
+            // Clean up incomplete dynamic obstacle
+            this.currentObstacle = [];
+            this.setMode('ready');
+            this.render();  // Clear any partial drawing
+            this.updateCanvasOverlay('Incomplete dynamic obstacle removed. Click DYNAMIC OBSTACLE to start again.');
             app.updateButtonStates();
         }
     }
     
     setMode(newMode) {
+        console.log(`🔄 Setting mode from "${this.mode}" to "${newMode}"`);
+        
+        // Clean up incomplete drawings when switching to ready mode
+        if (newMode === 'ready') {
+            // Clear incomplete boundary (less than 3 points)
+            if (this.boundary.length > 0 && this.boundary.length < 3) {
+                console.log(`🧹 Clearing incomplete boundary with ${this.boundary.length} points`);
+                this.boundary = [];
+            }
+            
+            // Clear any current obstacle
+            this.currentObstacle = [];
+        }
+        
         this.mode = newMode;
         this.currentObstacle = [];
+        this.mousePosition = null;  // Clear mouse position to remove helper lines
         
         // Update cursor
         this.canvas.style.cursor = newMode === 'ready' ? 'default' : 'crosshair';
         
         // Update mode indicator
         const indicator = document.getElementById('modeIndicator');
+        if (!indicator) {
+            console.error('❌ Mode indicator element not found');
+            return;
+        }
+        
         indicator.className = 'mode-indicator';
         
         switch (newMode) {
             case 'boundary':
                 indicator.textContent = 'Mode: Drawing Boundary';
                 indicator.classList.add('active', 'boundary');
+                console.log('✅ Mode indicator updated for boundary');
                 break;
             case 'obstacle':
                 indicator.textContent = 'Mode: Adding Obstacle';
                 indicator.classList.add('active', 'obstacle');
+                console.log('✅ Mode indicator updated for obstacle');
                 break;
             case 'obstacle-dynamic':
                 indicator.textContent = 'Mode: Adding Dynamic Obstacle';
                 indicator.classList.add('active', 'obstacle-dynamic');
+                console.log('✅ Mode indicator updated for dynamic obstacle');
                 break;
             default:
                 indicator.classList.remove('active');
+                console.log('✅ Mode indicator cleared');
                 break;
         }
     }
@@ -203,6 +364,16 @@ class CanvasManager {
         this.render();
     }
     
+    setHighlightedObstacle(obstacleId) {
+        this.highlightedObstacle = obstacleId;
+        this.render();
+    }
+    
+    clearHighlightedObstacle() {
+        this.highlightedObstacle = null;
+        this.render();
+    }
+    
     reset() {
         this.boundary = [];
         this.obstacles = [];
@@ -211,6 +382,11 @@ class CanvasManager {
         this.currentPath = [];
         this.robotPosition = null;
         this.currentObstacle = [];
+        
+        // Reset pan position to origin but keep zoom level
+        this.panX = 0;
+        this.panY = 0;
+        
         this.setMode('ready');
         this.updateCanvasOverlay('Click BOUNDARY to start defining the mowing area');
         this.render();
@@ -220,6 +396,13 @@ class CanvasManager {
         // Clear canvas
         this.ctx.fillStyle = this.colors.background;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Save current transform
+        this.ctx.save();
+        
+        // Apply zoom and pan transforms
+        this.ctx.translate(this.panX, this.panY);
+        this.ctx.scale(this.scale, this.scale);
         
         // Draw grid
         this.drawGrid();
@@ -231,12 +414,24 @@ class CanvasManager {
         
         // Draw static obstacles
         this.obstacles.forEach(obstacle => {
+            const isHighlighted = this.highlightedObstacle === obstacle.id;
             this.drawPolygon(obstacle.points, this.colors.obstacle, 2, true);
+            
+            // Draw highlight effect
+            if (isHighlighted) {
+                this.drawObstacleHighlight(obstacle.points, this.colors.obstacle);
+            }
         });
         
         // Draw dynamic obstacles
         this.dynamicObstacles.forEach(obstacle => {
+            const isHighlighted = this.highlightedObstacle === obstacle.id;
             this.drawPolygon(obstacle.points, this.colors.dynamicObstacle, 2, true);
+            
+            // Draw highlight effect
+            if (isHighlighted) {
+                this.drawObstacleHighlight(obstacle.points, this.colors.dynamicObstacle);
+            }
         });
         
         // Draw current obstacle being created
@@ -272,27 +467,42 @@ class CanvasManager {
         if (this.robotPosition) {
             this.drawRobot(this.robotPosition);
         }
+        
+        // Restore transform
+        this.ctx.restore();
     }
     
     drawGrid() {
-        const gridSize = 50; // 50px grid
+        const gridSize = 50; // 50px grid (1 meter)
         this.ctx.strokeStyle = this.colors.grid;
-        this.ctx.lineWidth = 1;
+        this.ctx.lineWidth = 1 / this.scale; // Adjust line width for zoom
         this.ctx.setLineDash([]);
         
+        // Calculate visible area in world coordinates
+        const visibleLeft = -this.panX / this.scale;
+        const visibleTop = -this.panY / this.scale;
+        const visibleRight = (this.canvas.width - this.panX) / this.scale;
+        const visibleBottom = (this.canvas.height - this.panY) / this.scale;
+        
+        // Calculate grid boundaries
+        const startX = Math.floor(visibleLeft / gridSize) * gridSize;
+        const endX = Math.ceil(visibleRight / gridSize) * gridSize;
+        const startY = Math.floor(visibleTop / gridSize) * gridSize;
+        const endY = Math.ceil(visibleBottom / gridSize) * gridSize;
+        
         // Vertical lines
-        for (let x = 0; x <= this.canvas.width; x += gridSize) {
+        for (let x = startX; x <= endX; x += gridSize) {
             this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.moveTo(x, visibleTop - gridSize);
+            this.ctx.lineTo(x, visibleBottom + gridSize);
             this.ctx.stroke();
         }
         
         // Horizontal lines
-        for (let y = 0; y <= this.canvas.height; y += gridSize) {
+        for (let y = startY; y <= endY; y += gridSize) {
             this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.moveTo(visibleLeft - gridSize, y);
+            this.ctx.lineTo(visibleRight + gridSize, y);
             this.ctx.stroke();
         }
     }
@@ -337,6 +547,33 @@ class CanvasManager {
             this.ctx.textAlign = 'center';
             this.ctx.fillText((index + 1).toString(), point.x, point.y + 4);
         });
+    }
+    
+    drawObstacleHighlight(points, baseColor) {
+        if (points.length < 3) return;
+        
+        // Draw outer glow effect
+        this.ctx.save();
+        this.ctx.shadowColor = baseColor;
+        this.ctx.shadowBlur = 20;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+        
+        // Draw thicker border for highlight
+        this.ctx.strokeStyle = baseColor;
+        this.ctx.lineWidth = 6;
+        this.ctx.setLineDash([]);
+        this.ctx.globalAlpha = 0.8;
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            this.ctx.lineTo(points[i].x, points[i].y);
+        }
+        this.ctx.closePath();
+        this.ctx.stroke();
+        
+        this.ctx.restore();
     }
     
     drawPath(path, color, lineWidth) {
@@ -459,5 +696,62 @@ class CanvasManager {
     updateRobotPosition(position) {
         this.robotPosition = position;
         this.render();
+    }
+    
+    // Zoom control methods
+    zoomIn() {
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const worldX = (centerX - this.panX) / this.scale;
+        const worldY = (centerY - this.panY) / this.scale;
+        
+        this.scale = Math.min(this.maxScale, this.scale * 1.2);
+        
+        this.panX = centerX - worldX * this.scale;
+        this.panY = centerY - worldY * this.scale;
+        
+        this.render();
+        this.updateZoomInfo();
+    }
+    
+    zoomOut() {
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const worldX = (centerX - this.panX) / this.scale;
+        const worldY = (centerY - this.panY) / this.scale;
+        
+        this.scale = Math.max(this.minScale, this.scale / 1.2);
+        
+        this.panX = centerX - worldX * this.scale;
+        this.panY = centerY - worldY * this.scale;
+        
+        this.render();
+        this.updateZoomInfo();
+    }
+    
+    resetZoom() {
+        this.scale = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+        this.render();
+        this.updateZoomInfo();
+    }
+    
+    updateZoomInfo() {
+        // Update zoom percentage in the UI if element exists
+        const zoomInfo = document.getElementById('zoomInfo');
+        if (zoomInfo) {
+            zoomInfo.textContent = `${Math.round(this.scale * 100)}%`;
+        }
+    }
+    
+    updateCursorPosition(position) {
+        // Update cursor position in the UI if element exists
+        const cursorInfo = document.getElementById('cursorPosition');
+        if (cursorInfo && position) {
+            const x = this.canvasToMeters(position.x);
+            const y = this.canvasToMeters(position.y);
+            cursorInfo.textContent = `(${x}, ${y}) m`;
+        }
     }
 }
