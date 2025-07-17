@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BladeOfGrass Path Planning Prototype</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f0f0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.8;
+            margin: 5px 0 0 0;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 80px);
+        }
+
+        /* Left Panel - Controls */
+        .left-panel {
+            width: 200px;
+            background-color: #34495e;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            margin-bottom: 30px;
+        }
+
+        .control-group h3 {
+            font-size: 14px;
+            margin-bottom: 15px;
+            color: #ecf0f1;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: none;
+            border-radius: 6px;
+            background-color: #3498db;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #2980b9;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.danger {
+            background-color: #e74c3c;
+        }
+
+        .btn.danger:hover {
+            background-color: #c0392b;
+        }
+
+        .btn.success {
+            background-color: #27ae60;
+        }
+
+        .btn.success:hover {
+            background-color: #229954;
+        }
+
+        .btn.warning {
+            background-color: #f39c12;
+        }
+
+        .btn.warning:hover {
+            background-color: #e67e22;
+        }
+
+        .btn:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .speed-control {
+            margin-top: 15px;
+        }
+
+        .speed-control label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: #bdc3c7;
+        }
+
+        .speed-slider {
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .speed-value {
+            font-size: 12px;
+            text-align: center;
+            color: #ecf0f1;
+        }
+
+        /* Center Panel - Canvas */
+        .center-panel {
+            flex: 1;
+            background-color: white;
+            position: relative;
+            border-left: 2px solid #bdc3c7;
+            border-right: 2px solid #bdc3c7;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #mainCanvas {
+            display: block;
+            cursor: crosshair;
+            background-color: #f8f9fa;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        /* Right Panel - Status & Obstacles */
+        .right-panel {
+            width: 250px;
+            background-color: #ecf0f1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .status-section {
+            margin-bottom: 30px;
+        }
+
+        .status-section h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #bdc3c7;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            font-weight: 500;
+            color: #34495e;
+        }
+
+        .status-value {
+            color: #7f8c8d;
+            font-family: monospace;
+        }
+
+        .obstacle-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .obstacle-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            background-color: white;
+            border-radius: 6px;
+            border-left: 4px solid #e74c3c;
+        }
+
+        .obstacle-item.dynamic {
+            border-left-color: #f39c12;
+        }
+
+        .obstacle-name {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .obstacle-delete {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .obstacle-delete:hover {
+            background-color: #c0392b;
+        }
+
+        /* Mode indicators */
+        .mode-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(52, 152, 219, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            pointer-events: none;
+            display: none;
+        }
+
+        .mode-indicator.active {
+            display: block;
+        }
+
+        .mode-indicator.boundary {
+            background-color: rgba(39, 174, 96, 0.9);
+        }
+
+        .mode-indicator.obstacle {
+            background-color: rgba(231, 76, 60, 0.9);
+        }
+
+        .mode-indicator.obstacle-dynamic {
+            background-color: rgba(243, 156, 18, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌱 BladeOfGrass Path Planning Prototype</h1>
+        <p>Trapezoidal Decomposition Coverage Algorithm - Local Laptop Testing</p>
+    </div>
+
+    <div class="main-container">
+        <!-- Left Panel: Controls -->
+        <div class="left-panel">
+            <div class="control-group">
+                <h3>Setup</h3>
+                <button class="btn danger" id="resetBtn">🔄 RESET</button>
+                <button class="btn success" id="boundaryBtn">📐 BOUNDARY</button>
+                <button class="btn" id="planBtn" disabled>🧮 PLAN</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Obstacles</h3>
+                <button class="btn warning" id="addObstacleBtn">🌳 ADD OBSTACLE</button>
+                <button class="btn warning" id="addDynamicObstacleBtn">⚡ ADD DYNAMIC</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Simulation</h3>
+                <button class="btn success" id="runBtn" disabled>▶️ RUN</button>
+                <button class="btn" id="pauseBtn" disabled>⏸️ PAUSE</button>
+                <button class="btn danger" id="stopBtn" disabled>⏹️ STOP</button>
+                
+                <div class="speed-control">
+                    <label for="speedSlider">Robot Speed</label>
+                    <input type="range" id="speedSlider" class="speed-slider" min="1" max="10" value="5">
+                    <div class="speed-value" id="speedValue">5x</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel: Canvas -->
+        <div class="center-panel">
+            <div class="canvas-container">
+                <canvas id="mainCanvas"></canvas>
+                <div class="canvas-overlay" id="canvasOverlay">
+                    Click BOUNDARY to start defining the mowing area
+                </div>
+                <div class="mode-indicator" id="modeIndicator">
+                    Mode: Ready
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Status & Obstacles -->
+        <div class="right-panel">
+            <div class="status-section">
+                <h3>📊 Robot Status</h3>
+                <div class="status-item">
+                    <span class="status-label">Position:</span>
+                    <span class="status-value" id="robotPosition">Not started</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Speed:</span>
+                    <span class="status-value" id="robotSpeed">0.0 m/s</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Progress:</span>
+                    <span class="status-value" id="robotProgress">0%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">State:</span>
+                    <span class="status-value" id="robotState">Idle</span>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <h3>📈 Statistics</h3>
+                <div class="status-item">
+                    <span class="status-label">Path Length:</span>
+                    <span class="status-value" id="pathLength">0.0 m</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Coverage Area:</span>
+                    <span class="status-value" id="coverageArea">0.0 m²</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Efficiency:</span>
+                    <span class="status-value" id="efficiency">0%</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Est. Time:</span>
+                    <span class="status-value" id="estimatedTime">0:00</span>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <h3>🚧 Obstacles</h3>
+                <div class="obstacle-list" id="obstacleList">
+                    <p style="color: #7f8c8d; font-style: italic; text-align: center; padding: 20px;">
+                        No obstacles defined
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/canvas.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
